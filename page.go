@@ -779,7 +779,17 @@ func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s strin
 
 // Content returns the page's content.
 func (p Page) Content() Content {
-	strm := p.V.Key("Contents")
+	v := p.V.Key("Contents")
+
+	// The Contents key can either be a stream or an array of streams
+	if v.Kind() == Stream || v.Kind() == Array {
+		return p.content(v)
+	} else {
+		panic("unsupported value kind in Contents key")
+	}
+}
+
+func (p Page) content(strm Value) Content {
 	var enc TextEncoding = &nopEncoder{}
 
 	var g = gstate{
@@ -814,7 +824,7 @@ func (p Page) Content() Content {
 
 	var rect []Rect
 	var gstack []gstate
-	Interpret(strm, func(stk *Stack, op string) {
+	do := func(stk *Stack, op string) {
 		n := stk.Len()
 		args := make([]Value, n)
 		for i := n - 1; i >= 0; i-- {
@@ -995,7 +1005,12 @@ func (p Page) Content() Content {
 			}
 			g.Th = args[0].Float64() / 100
 		}
-	})
+	}
+	if strm.Kind() == Stream {
+		Interpret(strm, do)
+	} else {
+		InterpretArray(strm, do)
+	}
 	return Content{text, rect}
 }
 

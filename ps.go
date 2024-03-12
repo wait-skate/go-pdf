@@ -123,6 +123,83 @@ Reading:
 	}
 }
 
+// Interpret an array of streams as a single stream
+func InterpretArray(strms Value, do func(stk *Stack, op string)) {
+	var stk Stack
+	var dicts []dict
+	for i := 0; i < strms.Len(); i++ {
+		s := strms.Index(i)
+		rd := s.Reader()
+		b := newBuffer(rd, 0)
+		b.allowEOF = true
+		b.allowObjptr = false
+		b.allowStream = false
+	Reading:
+		for {
+			tok := b.readToken()
+			if tok == io.EOF {
+				break
+			}
+			if kw, ok := tok.(keyword); ok {
+				switch kw {
+				case "null", "[", "]", "<<", ">>":
+					break
+				default:
+					for i := len(dicts) - 1; i >= 0; i-- {
+						if v, ok := dicts[i][name(kw)]; ok {
+							stk.Push(Value{nil, objptr{}, v})
+							continue Reading
+						}
+					}
+					do(&stk, string(kw))
+					continue
+				case "dict":
+					stk.Pop()
+					stk.Push(Value{nil, objptr{}, make(dict)})
+					continue
+				case "currentdict":
+					if len(dicts) == 0 {
+						panic("no current dictionary")
+					}
+					stk.Push(Value{nil, objptr{}, dicts[len(dicts)-1]})
+					continue
+				case "begin":
+					d := stk.Pop()
+					if d.Kind() != Dict {
+						panic("cannot begin non-dict")
+					}
+					dicts = append(dicts, d.data.(dict))
+					continue
+				case "end":
+					if len(dicts) <= 0 {
+						panic("mismatched begin/end")
+					}
+					dicts = dicts[:len(dicts)-1]
+					continue
+				case "def":
+					if len(dicts) <= 0 {
+						panic("def without open dict")
+					}
+					val := stk.Pop()
+					key, ok := stk.Pop().data.(name)
+					if !ok {
+						panic("def of non-name")
+					}
+					dicts[len(dicts)-1][key] = val.data
+					continue
+				case "pop":
+					stk.Pop()
+					continue
+				}
+			}
+			b.unreadToken(tok)
+			obj := b.readObject()
+			stk.Push(Value{nil, objptr{}, obj})
+		}
+	}
+
+}
+
 type seqReader struct {
 	rd     io.Reader
 	offset int64
