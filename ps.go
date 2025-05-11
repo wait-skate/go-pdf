@@ -123,7 +123,9 @@ func Interpret(strm Value, do func(stk *Stack, op string)) {
 					val := stk.Pop()
 					key, ok := stk.Pop().data.(name)
 					if !ok {
-						panic("def of non-name")
+						// panic(fmt.Sprintf("def of non-name: %+v", stk.Pop().data))
+						// Skip the value if it has key without value
+						continue
 					}
 					dicts[len(dicts)-1][key] = val.data
 					continue
