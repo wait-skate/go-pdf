@@ -118,7 +118,7 @@ func readPdf(path string) (string, error) {
 
 	for pageIndex := 1; pageIndex <= totalPage; pageIndex++ {
 		p := r.Page(pageIndex)
-		if p.V.IsNull() {
+		if p.V.IsNull() || p.V.Key("Contents").Kind() == pdf.Null {
 			continue
 		}
 

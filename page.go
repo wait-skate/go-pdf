@@ -87,7 +87,8 @@ func (r *Reader) GetStyledTexts() (sentences []Text, err error) {
 	totalPage := r.NumPage()
 	for pageIndex := 1; pageIndex <= totalPage; pageIndex++ {
 		p := r.Page(pageIndex)
-		if p.V.IsNull() {
+
+		if p.V.IsNull() || p.V.Key("Contents").Kind() == Null {
 			continue
 		}
 		var lastTextStyle Text
@@ -525,6 +526,10 @@ func (p Page) GetPlainText(fonts map[string]*Font) (result string, err error) {
 		}
 	}()
 
+	// Handle in case the content page is empty
+	if p.V.IsNull() || p.V.Key("Contents").Kind() == Null {
+		return "", nil
+	}
 	strm := p.V.Key("Contents")
 	var enc TextEncoding = &nopEncoder{}
 
@@ -747,6 +752,11 @@ func (p Page) GetTextByRow() (Rows, error) {
 }
 
 func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s string)) {
+	// Handle in case the content page is empty
+	if p.V.IsNull() || p.V.Key("Contents").Kind() == Null {
+		return
+	}
+
 	strm := p.V.Key("Contents")
 
 	fonts := make(map[string]*Font)
@@ -817,6 +827,10 @@ func (p Page) walkTextBlocks(walker func(enc TextEncoding, x, y float64, s strin
 
 // Content returns the page's content.
 func (p Page) Content() Content {
+	// Handle in case the content page is empty
+	if p.V.IsNull() || p.V.Key("Contents").Kind() == Null {
+		return Content{}
+	}
 	strm := p.V.Key("Contents")
 	var enc TextEncoding = &nopEncoder{}
 
