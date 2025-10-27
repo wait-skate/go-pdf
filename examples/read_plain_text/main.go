@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/ledongthuc/pdf"
+	pdf "github.com/wait-skate/go-pdf"
 )
 
 func main() {
