@@ -14,14 +14,17 @@ type Stack struct {
 	stack []Value
 }
 
+// Len returns the length
 func (stk *Stack) Len() int {
 	return len(stk.stack)
 }
 
+// Push does what it says
 func (stk *Stack) Push(v Value) {
 	stk.stack = append(stk.stack, v)
 }
 
+// Pop does what it says
 func (stk *Stack) Pop() Value {
 	n := len(stk.stack)
 	if n == 0 {

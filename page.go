@@ -6,9 +6,11 @@ package pdf
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -516,19 +518,23 @@ type gstate struct {
 	CTM   matrix
 }
 
-// GetPlainText returns the page's all text without format.
-// fonts can be passed in (to improve parsing performance) or left nil
-func (p Page) GetPlainText(fonts map[string]*Font) (result string, err error) {
+// Match holds both the source and interpreted result that matched
+type Match struct {
+	Src string
+	Str string
+}
+
+// GetTextMatches gets text that matches
+func (p Page) GetTextMatches(compiledRe *regexp.Regexp, fonts map[string]*Font) (matches []Match, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			result = ""
 			err = errors.New(fmt.Sprint(r))
 		}
 	}()
 
 	// Handle in case the content page is empty
 	if p.V.IsNull() || p.V.Key("Contents").Kind() == Null {
-		return "", nil
+		return nil, nil
 	}
 	strm := p.V.Key("Contents")
 	var enc TextEncoding = &nopEncoder{}
@@ -538,19 +544,6 @@ func (p Page) GetPlainText(fonts map[string]*Font) (result string, err error) {
 		for _, font := range p.Fonts() {
 			f := p.Font(font)
 			fonts[font] = &f
-		}
-	}
-
-	var textBuilder bytes.Buffer
-	showText := func(s string) {
-		textBuilder.WriteString(s)
-	}
-	showEncodedText := func(s string) {
-		for _, ch := range enc.Decode(s) {
-			_, err := textBuilder.WriteRune(ch)
-			if err != nil {
-				panic(err)
-			}
 		}
 	}
 
@@ -567,9 +560,9 @@ func (p Page) GetPlainText(fonts map[string]*Font) (result string, err error) {
 			// fmt.Println("<DEBUG><op>", op, "</op><args>", args, "</args>")
 			return
 		case "BT": // add a space between text objects
-			showText("\n")
+			//showText("\n")
 		case "T*": // move to start of next line
-			showEncodedText("\n")
+			//showText(enc.Decode("\n"))
 		case "Tf": // set text font and size
 			if len(args) != 2 {
 				panic("bad TL")
@@ -593,18 +586,43 @@ func (p Page) GetPlainText(fonts map[string]*Font) (result string, err error) {
 			if len(args) != 1 {
 				panic("bad Tj operator")
 			}
-			showEncodedText(args[0].RawString())
-		case "TJ": // show text, allowing individual glyph positioning
+			//showEncodedText(args[0].RawString())
+		case "TJ": // show text, allowing individual glyph positioning XXX
+			var buf bytes.Buffer
+			var cmd bytes.Buffer
 			v := args[0]
 			for i := 0; i < v.Len(); i++ {
 				x := v.Index(i)
 				if x.Kind() == String {
-					showEncodedText(x.RawString())
+					cmd.WriteString(fmt.Sprintf("%v", strings.ToUpper(hex.EncodeToString([]byte(x.RawString())))))
+					for _, ch := range enc.Decode(x.RawString()) {
+						if _, err := buf.WriteRune(ch); err != nil {
+							panic(err)
+						}
+					}
 				}
+			}
+			if compiledRe.Match(buf.Bytes()) {
+				matches = append(matches, Match{Src: cmd.String(), Str: buf.String()})
 			}
 		}
 	})
-	return textBuilder.String(), nil
+	return matches, nil
+}
+
+// GetPlainText returns the page's all text without format.
+// fonts can be passed in (to improve parsing performance) or left nil
+func (p Page) GetPlainText(fonts map[string]*Font) (result string, err error) {
+	re := regexp.MustCompile(`.`)
+	var txt bytes.Buffer
+	matches, err := p.GetTextMatches(re, fonts)
+	if err != nil {
+		return "", err
+	}
+	for _, m := range matches {
+		txt.WriteString(m.Str)
+	}
+	return txt.String(), nil
 }
 
 // Column represents the contents of a column
